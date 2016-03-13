@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+ <html>
+   <head>
+     <title>Google Maps Plazas Comunitarias</title>
+     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+     <meta charset="utf-8">
+     <style>
+       html, body, #map_canvas {
+         margin: 0;
+         padding: 0;
+         height: 100%;
+       }
+     </style>
+<script src="https://maps.googleapis.com/maps/api/js?libraries=geometry&sensor=false"></script>
+<script type="text/javascript">     
+
+// Place Name[0],delivery[1],Address[2],Delivery Zone[3],Coordinates[4] data from FusionTables pizza stores example
+var locations = [
+
+["Centro de Recursos Educativos","no","161 E 104th St, New York, NY","<Polygon><outerBoundaryIs><LinearRing><coordinates>-122.121277,37.386799,0 -122.158012,37.4168,0 -122.158012,37.448151,0 -122.142906,37.456055,0 -122.118874,37.45224,0 -122.107544,37.437793,0 -122.102737,37.422526,0 -122.113037,37.414618,0 -122.121277,37.386799,0   </coordinates></LinearRing></outerBoundaryIs></Polygon>","40.79082, -73.94651","http://maps.google.com/mapfiles/ms/icons/blue.png"],
+["Community Resource Center","no","134 Center Ave, Mamaroneck, NY","<Polygon><outerBoundaryIs><LinearRing><coordinates>-122.121277,37.386799,0 -122.158012,37.4168,0 -122.158012,37.448151,0 -122.142906,37.456055,0 -122.118874,37.45224,0 -122.107544,37.437793,0 -122.102737,37.422526,0 -122.113037,37.414618,0 -122.121277,37.386799,0   </coordinates></LinearRing></outerBoundaryIs></Polygon>","40.95361, -73.73977","http://maps.google.com/mapfiles/ms/icons/blue.png"],
+["Backstretch Education Fund","yes","1000 Santa Ave, Menlo Park, CA","<Polygon><outerBoundaryIs><LinearRing><coordinates>-122.200928,37.438611,0 -122.158012,37.4168,0 -122.158012,37.448151,0 -122.142906,37.456055,0 -122.144623,37.475948,0 -122.164192,37.481125,0 -122.189255,37.478673,0 -122.208481,37.468319,0 -122.201271,37.438338,0 </coordinates></LinearRing></outerBoundaryIs></Polygon>","40.70914, -73.71181","http://maps.google.com/mapfiles/ms/icons/green.png"],
+["Mixteca Organization","no","245 23rd St, Brooklyn, NY","<Polygon><outerBoundaryIs><LinearRing><coordinates>-122.304268,37.516534,0 -122.300835,37.505096,0 -122.262383,37.481669,0 -122.242813,37.502917,0 -122.244186,37.534232,0 -122.269249,37.550021,0 -122.291222,37.545122,0 -122.302895,37.537499,0 -122.304268,37.516534,0 </coordinates></LinearRing></outerBoundaryIs></Polygon>","40.66014, -73.99408","http://maps.google.com/mapfiles/ms/icons/red.png"],
+];
+// alert(locations.length);
+
+var geocoder = null;
+var map = null;
+var customerMarker = null;
+var gmarkers = [];
+var closest = [];
+var directionsDisplay = new google.maps.DirectionsRenderer();;
+var directionsService = new google.maps.DirectionsService();
+var map;
+
+function initialize() {
+// alert("init");
+  geocoder = new google.maps.Geocoder();
+  map = new google.maps.Map(document.getElementById('map'), 
+        {       
+            zoom: 9,       
+            center: new google.maps.LatLng(52.6699927, -0.7274620),       
+            mapTypeId: google.maps.MapTypeId.ROADMAP     
+        });      
+  var infowindow = new google.maps.InfoWindow();      
+  var marker, i;      
+  var bounds = new google.maps.LatLngBounds();
+  //document.getElementById('info').innerHTML = "found "+locations.length+" locations<br>";
+  for (i = 0; i < locations.length; i++) {         
+            var coordStr = locations[i][4];
+	    var coords = coordStr.split(",");
+	    var pt = new google.maps.LatLng(parseFloat(coords[0]),parseFloat(coords[1]));
+            bounds.extend(pt);
+            marker = new google.maps.Marker({         
+                            position: pt,         
+                            map: map,
+			    icon: locations[i][5],
+                            address: locations[i][2],
+                            title: locations[i][0],
+                            html: locations[i][0]+"<br>"+locations[i][2]+"<br><br><a href='javascript:getDirections(customerMarker.getPosition(),&quot;"+locations[i][2]+"&quot;);'>Get Directions</a>"
+                            });                              
+            gmarkers.push(marker);
+            google.maps.event.addListener(marker, 'click', (function(marker, i) {         return function() 
+            {           infowindow.setContent(marker.html);
+                        infowindow.open(map, marker);         
+            }       
+        })
+        (marker, i));     
+    }
+    map.fitBounds(bounds);   
+
+}
+
+      function codeAddress() {
+        var address = document.getElementById('address').value;
+        geocoder.geocode( { 'address': address}, function(results, status) {
+          if (status == google.maps.GeocoderStatus.OK) {
+            map.setCenter(results[0].geometry.location);
+	    if (customerMarker) customerMarker.setMap(null);
+            customerMarker = new google.maps.Marker({
+                map: map,
+                position: results[0].geometry.location
+            });
+	    closest = findClosestN(results[0].geometry.location,10);
+            // get driving distance
+            closest = closest.splice(0,3);
+            calculateDistances(results[0].geometry.location, closest,3);
+          } else {
+            alert('Geocode was not successful for the following reason: ' + status);
+          }
+        });
+      }
+
+function findClosestN(pt,numberOfResults) {
+   var closest = [];
+  // document.getElementById('info').innerHTML += "processing "+gmarkers.length+"<br>";
+   for (var i=0; i<gmarkers.length;i++) {
+     gmarkers[i].distance = google.maps.geometry.spherical.computeDistanceBetween(pt,gmarkers[i].getPosition());
+    // document.getElementById('info').innerHTML += "process "+i+":"+gmarkers[i].getPosition().toUrlValue(6)+":"+gmarkers[i].distance.toFixed(2)+"<br>";
+     gmarkers[i].setMap(null);
+     closest.push(gmarkers[i]);
+   }
+   closest.sort(sortByDist);
+   return closest;
+}
+
+function sortByDist(a,b) {
+   return (a.distance- b.distance)
+}
+     
+function calculateDistances(pt,closest,numberOfResults) {
+  var service = new google.maps.DistanceMatrixService();
+  var request =    {
+      origins: [pt],
+      destinations: [],
+      travelMode: google.maps.TravelMode.DRIVING,
+      unitSystem: google.maps.UnitSystem.METRIC,
+      avoidHighways: false,
+      avoidTolls: false
+    };
+  for (var i=0; i<closest.length; i++) request.destinations.push(closest[i].getPosition());
+  service.getDistanceMatrix(request, function (response, status) {
+    if (status != google.maps.DistanceMatrixStatus.OK) {
+      alert('Error was: ' + status);
+    } else {
+      var origins = response.originAddresses;
+      var destinations = response.destinationAddresses;
+      var outputDiv = document.getElementById('side_bar');
+      outputDiv.innerHTML = '';
+
+      var results = response.rows[0].elements;
+      for (var i = 0; i < numberOfResults; i++) {
+        closest[i].setMap(map);
+        outputDiv.innerHTML += "<a href='javascript:google.maps.event.trigger(closest["+i+"],\"click\");'>"+closest[i].title + '</a><br>' + closest[i].address+"<br>"
+            + results[i].distance.text + ' appoximately '
+            + results[i].duration.text + '<br><hr>';
+      }
+    }
+  });
+}
+
+function getDirections(origin, destination) {
+  var request = {
+      origin:origin,
+      destination:destination,
+      travelMode: google.maps.DirectionsTravelMode.TRANSIT
+	  
+  };
+  directionsService.route(request, function(response, status) {
+    if (status == google.maps.DirectionsStatus.OK) {
+      directionsDisplay.setMap(map);
+      directionsDisplay.setDirections(response);
+      directionsDisplay.setPanel(document.getElementById('side_bar'));
+    }
+  });
+}
+
+google.maps.event.addDomListener(window, 'load', initialize);
+</script> 
+   </head>
+   <body>
+
+    
+	<table border="1">
+	  <tr>
+		<td>
+          <div id="map" style="height: 600px; width:1000px;"></div> <!--display map-->
+        </td>
+	    <td style="vertical-align:top;">
+		  <div style="text-align:center;padding: 15px; color:blue;">
+			<h2 >Find the Nearest School </h2>
+			<input id="address" type="text" value="New York,NY"></input>
+			<input  type="button" value="Search" onclick="codeAddress();"></input> <br/><br/>
+		  </div>
+         <div id="side_bar"></div>
+        </td>
+	</tr>
+  </table>
+
+<div id="info"></div>
+<script src="http://www.google-analytics.com/urchin.js" type="text/javascript"> 
+</script> 
+<script type="text/javascript"> 
+_uacct = "UA-162157-1";
+urchinTracker();
+</script> 
+   </body>
+ </html>
